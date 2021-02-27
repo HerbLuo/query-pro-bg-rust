@@ -1,0 +1,5 @@
+[development]
+address = "0.0.0.0"
+
+[production]
+secret_key = "SnRsKPtNrdxdtoVL63jiSEZIjp0QCzNcJYIJYHOFDlc="
