@@ -7,7 +7,7 @@ use rocket::request::Request;
 
 #[derive(Debug, Serialize)]
 pub struct Data<T> {
-    pub success: u8,
+    pub ok: u8,
     // 0 false, 1 true
     pub data: T,
 }

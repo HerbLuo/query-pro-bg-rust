@@ -1,7 +1,7 @@
 macro_rules! success {
     ($data:expr) => {
         rocket_contrib::json::Json(crate::helper::resp::Data {
-            success: 1,
+            ok: 1,
             data: $data,
         })
     };
@@ -16,7 +16,7 @@ macro_rules! fail {
         crate::helper::resp::WithStatus (
             $code.status,
             rocket_contrib::json::Json(crate::helper::resp::Data {
-                success: 0,
+                ok: 0,
                 data: crate::helper::resp::HttpError {
                     code: $code.code,
                     serial,

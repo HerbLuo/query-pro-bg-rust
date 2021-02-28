@@ -46,6 +46,8 @@ pub struct FromJoinerOn {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct FromJoiner {
+  #[serde(rename="type")]
+  pub join_type: String,
   pub table: String,
   pub on: Vec<FromJoinerOn>,
 }
