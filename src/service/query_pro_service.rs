@@ -3,7 +3,7 @@ use serde_json::Value;
 use crate::ec;
 use crate::helper::resp::{HttpErrorData, JsonResult};
 
-fn build_select_fields(query_structure: &QueryStructure, by_remote: bool) -> Result<String, HttpErrorData> {
+fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
     let fields = &query_structure.fields;
 
     if fields.len() == 0 {
@@ -13,11 +13,18 @@ fn build_select_fields(query_structure: &QueryStructure, by_remote: bool) -> Res
     let mut sql = String::new();
     let last_field_index = fields.len() - 1;
     for (i, field) in fields.iter().enumerate() {
+        let upper_case = field.commands.as_ref().map(|c| c == "UPPER_CASE").unwrap_or(false);
+        if upper_case {
+            sql.push_str("UPPER(");
+        }
         if let Some(table) = &field.table {
             sql.push_str(table);
             sql.push('.');
         }
         sql.push_str(&field.column);
+        if upper_case {
+            sql.push(')');
+        }
         if i != last_field_index {
             sql.push_str(", ");
         }
@@ -63,42 +70,60 @@ fn build_from_clause(query_structure: &QueryStructure) -> Result<String, HttpErr
     return Ok(sql);
 }
 
-fn build_where_clause(query_structure: &QueryStructure, by_remote: bool) -> Result<String, HttpErrorData> {
+fn build_where_clause(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
     let where_clause_vec = &query_structure.where_clause;
     if where_clause_vec.len() == 0 {
         return Ok(String::new())
     }
 
     fn parse_where_clause(mut sql: &mut String, where_clause: &WhereClause) -> Result<(), HttpErrorData> {
+        let upper_case = where_clause.commands.as_ref()
+            .map(|c| c == "UPPER_CASE")
+            .unwrap_or(false);
         if let Some(field) = &where_clause.field {
+            if upper_case {
+                sql.push_str("UPPER(")
+            }
             if let Some(table) = &field.table {
                 sql.push_str(table.as_str());
                 sql.push('.');
             }
             sql.push_str(field.column.as_str());
+            if upper_case {
+                sql.push(')')
+            }
         }
         let operator = &where_clause.operator;
         sql.push(' ');
         sql.push_str(operator.as_str());
         sql.push(' ');
         let handle_no_arr_value = |sql: &mut String, value: &Value| -> Result<(), HttpErrorData> {
+            if upper_case {
+                sql.push_str("UPPER(");
+            }
+            let do_final_and_return = |sql: &mut String| {
+                if upper_case {
+                    sql.push(')');
+                }
+                return Ok(())
+            };
             if let Some(val_str) = value.as_str() {
                 sql.push('\'');
                 sql.push_str(val_str);
                 sql.push('\'');
-                return Ok(());
+                return do_final_and_return(sql);
             }
             if let Some(val_num) = value.as_f64() {
                 sql.push_str(val_num.to_string().as_str());
-                return Ok(());
+                return do_final_and_return(sql);
             }
             if let Some(val_bool) = value.as_bool() {
                 sql.push_str(&val_bool.to_string().as_str());
-                return Ok(());
+                return do_final_and_return(sql);
             }
             if let Some(_) = value.as_null() {
                 sql.push_str("null");
-                return Ok(());
+                return do_final_and_return(sql);
             }
             let where_clause: WhereClause = serde_json::from_value(value.clone()) // todo the clone
                 .map_err(|e| fail!(ec::NotImplemented, format!("not implemented({:?}) {:?}", value, e)))?;
@@ -190,13 +215,13 @@ fn build_limit_clause(query_structure: &QueryStructure) -> String {
     String::new()
 }
 
-fn query_structure_to_sql(query_structure: &QueryStructure, by_remote: bool) -> Result<String, HttpErrorData> {
+fn query_structure_to_sql(query_structure: &QueryStructure, _: bool) -> Result<String, HttpErrorData> {
     println!("{:?}", query_structure);
 
     let action = &query_structure.action;
-    let select_fields = build_select_fields(&query_structure, by_remote)?;
+    let select_fields = build_select_fields(&query_structure)?;
     let from_clause = build_from_clause(&query_structure)?;
-    let where_clause = build_where_clause(&query_structure, by_remote)?;
+    let where_clause = build_where_clause(&query_structure)?;
     let order_by_clause = build_order_by_clause(&query_structure)?;
     let limit_clause = build_limit_clause(&query_structure);
 

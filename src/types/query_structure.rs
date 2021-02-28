@@ -22,13 +22,15 @@ pub struct OrderByClause {
 pub struct Field {
   pub table: Option<String>,
   pub column: String,
+  pub commands: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct WhereClause {
   pub field: Option<Field>,
   pub operator: String,
-  pub value: Option<Value> // null arrayOr<string boolean integer long date> WhereClause[]
+  pub value: Option<Value>, // null arrayOr<string boolean integer long date> WhereClause[]
+  pub commands: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
