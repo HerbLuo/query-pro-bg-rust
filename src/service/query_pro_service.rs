@@ -17,6 +17,7 @@ fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpE
         if upper_case {
             sql.push_str("UPPER(");
         }
+        // here
         if let Some(table) = &field.table {
             sql.push_str(table);
             sql.push('.');

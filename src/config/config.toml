@@ -1,0 +1,7 @@
+[db]
+uri = "mysql://root:123456@127.0.0.1/words"
+
+[permission]
+#uri = "mysql://root:123456@127.0.0.1/words"
+db = "permission"
+allow_delete = false
