@@ -1,4 +1,5 @@
 #![feature(proc_macro_hygiene, decl_macro)]
+#![feature(once_cell)]
 
 #[macro_use]
 extern crate lazy_static;

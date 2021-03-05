@@ -1,4 +1,6 @@
 use crate::component::cors;
+use rocket::Request;
+use rocket::fairing::AdHoc;
 
 mod query_pro_controller;
 
