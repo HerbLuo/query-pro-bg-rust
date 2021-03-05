@@ -1,37 +1,28 @@
 use rocket::request::FromRequest;
 use rocket::{Request, request};
-use std::sync::Mutex;
-use std::lazy::SyncLazy;
+use std::lazy::SyncOnceCell;
+use rocket::http::Status;
 
 pub struct Uid {
     pub uid_sql_val_str: String,
 }
 
-pub trait UidGetter {
-    fn uid_getter(&self, req: &Request) -> Uid;
-}
+static UID_GETTER: SyncOnceCell<Box<dyn Sync + Send + Fn(&Request) -> Uid>> = SyncOnceCell::new();
 
-pub struct DefaultUidGetter {
-
-}
-
-impl UidGetter for DefaultUidGetter {
-    fn uid_getter(&self, req: &Request) -> Uid {
-        Uid { uid_sql_val_str: "err".to_string() }
+pub fn set_uid_getter<F: 'static + Sync + Send + Fn(&Request) -> Uid>(uid_getter: F) {
+    if let Err(_) = UID_GETTER.set(Box::new(uid_getter)) {
+        panic!("set uid_getter failed.")
     }
-}
-
-static UID_GETTER: SyncLazy<Mutex<Box<dyn Fn(&Request) -> Uid>>> =
-    SyncLazy::new(|| Mutex::new( Box::new(|_| Uid{ uid_sql_val_str: "err".to_string() })));
-
-pub fn set_uid_getter<F: Fn(&Request) -> Uid>(uid_getter: F) {
-  *UID_GETTER.lock().unwrap() = Box::new(|req| uid_getter(req));
 }
 
 impl<'a, 'r> FromRequest<'a, 'r> for Uid {
     type Error = ();
 
     fn from_request(request: &'a Request<'r>) -> request::Outcome<Self, Self::Error> {
-        request::Outcome::Success(UID_GETTER.uid_getter(request))
+        let uid_getter = match UID_GETTER.get() {
+            Some(u) => u,
+            None => return request::Outcome::Failure((Status::InternalServerError, ()))
+        };
+        request::Outcome::Success(uid_getter(request))
     }
 }
