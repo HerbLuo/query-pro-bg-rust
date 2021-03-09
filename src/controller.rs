@@ -1,15 +1,20 @@
 use crate::component::cors;
+use crate::component::catchers;
+use crate::model::permissions::Permissions;
 
-mod query_pro_controller;
+pub mod query_pro_controller;
 
-pub fn init() {
-    rocket::ignite()
+pub fn init(port: u16, permissions: &Vec<Permissions>) {
+    let mut config = rocket::ignite().config().clone();
+    config.set_port(port);
+    info!("Rewriting config port");
+    rocket::custom(config)
         .attach(cors::CORS())
-        // .register(catchers![
-        //     catchers::unauthorized,
-        //     catchers::forbidden,
-        //     catchers::notfound,
-        // ])
+        .register(catchers![
+            catchers::unauthorized,
+            catchers::forbidden,
+            catchers::notfound,
+        ])
         .mount(
             "/",
             routes![
@@ -19,4 +24,3 @@ pub fn init() {
         )
         .launch();
 }
-

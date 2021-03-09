@@ -1,1 +1,3 @@
-pub mod config;
+mod config;
+pub use self::config::Config;
+pub use self::config::ConfigBuilder;

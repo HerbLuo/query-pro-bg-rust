@@ -1,5 +1,7 @@
-[development]
+[global]
 address = "0.0.0.0"
+port = 28686
+keep_alive = 10
 
 [production]
 secret_key = "SnRsKPtNrdxdtoVL63jiSEZIjp0QCzNcJYIJYHOFDlc="

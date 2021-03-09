@@ -1,7 +1,8 @@
-use crate::types::query_structure::{QueryStructure, WhereClause};
+use crate::model::query_structure::{QueryStructure, WhereClause};
 use serde_json::Value;
 use crate::ec;
 use crate::helper::resp::{HttpErrorData, JsonResult};
+use crate::types::Uid;
 
 fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
     let fields = &query_structure.fields;
@@ -9,6 +10,8 @@ fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpE
     if fields.len() == 0 {
         return Ok("*".to_string());
     }
+
+    // 这里注意，为了权限控制，应该过滤掉前端传来的不合法的字段
 
     let mut sql = String::new();
     let last_field_index = fields.len() - 1;
@@ -71,7 +74,7 @@ fn build_from_clause(query_structure: &QueryStructure) -> Result<String, HttpErr
     return Ok(sql);
 }
 
-fn build_where_clause(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
+fn build_where_clause(uid: &Uid, query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
     let where_clause_vec = &query_structure.where_clause;
     if where_clause_vec.len() == 0 {
         return Ok(String::new())
@@ -216,13 +219,13 @@ fn build_limit_clause(query_structure: &QueryStructure) -> String {
     String::new()
 }
 
-fn query_structure_to_sql(query_structure: &QueryStructure, _: bool) -> Result<String, HttpErrorData> {
+fn query_structure_to_sql(uid: &Uid, query_structure: &QueryStructure, _: bool) -> Result<String, HttpErrorData> {
     println!("{:?}", query_structure);
 
     let action = &query_structure.action;
     let select_fields = build_select_fields(&query_structure)?;
     let from_clause = build_from_clause(&query_structure)?;
-    let where_clause = build_where_clause(&query_structure)?;
+    let where_clause = build_where_clause(uid, &query_structure)?;
     let order_by_clause = build_order_by_clause(&query_structure)?;
     let limit_clause = build_limit_clause(&query_structure);
 
@@ -236,8 +239,7 @@ fn query_structure_to_sql(query_structure: &QueryStructure, _: bool) -> Result<S
     ))
 }
 
-pub fn query(query_structure: QueryStructure, by_remote: bool) -> JsonResult<Vec<String>> {
-    let sql = query_structure_to_sql(&query_structure, by_remote)?;
-    println!("{}", sql);
+pub fn query(uid: &Uid, query_structure: QueryStructure, by_remote: bool) -> JsonResult<Vec<String>> {
+    let sql = query_structure_to_sql(uid, &query_structure, by_remote)?;
     Ok(success!(vec![sql]))
 }
