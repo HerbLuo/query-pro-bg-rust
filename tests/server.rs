@@ -9,15 +9,15 @@ fn main() {
         Permissions {
             table: String::from("user_pri"),
             column: None,
-            uid_read: Some(String::from("uid")),
-            uid_write: Some(String::from("uid")),
+            uid_read: Some(String::from("user_pri.uid")),
+            uid_write: Some(String::from("user_pri.uid")),
             joiners: None
         },
         Permissions {
             table: String::from("user_pri_setting"),
             column: None,
-            uid_read: Some(String::from("uid")),
-            uid_write: Some(String::from("uid")),
+            uid_read: Some(String::from("user_pri_setting.uid")),
+            uid_write: Some(String::from("user_pri_setting.uid")),
             joiners: None
         },
     ];

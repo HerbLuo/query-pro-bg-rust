@@ -1,4 +1,4 @@
-use crate::model::query_structure::{QueryStructure, WhereClause};
+use crate::model::query_structure::{QueryStructure, WhereClause, QueryStructureAction};
 use serde_json::Value;
 use crate::ec;
 use crate::helper::resp::{HttpErrorData, JsonResult};
@@ -13,7 +13,7 @@ fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpE
         return Ok("*".to_string());
     }
 
-    // 这里注意，为了权限控制，应该过滤掉前端传来的不合法的字段
+    // 这里注意，为了权限控制，应该过滤掉前端传来的不合法的字段, 比如子查询等
 
     let mut sql = String::new();
     let last_field_index = fields.len() - 1;
@@ -38,9 +38,37 @@ fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpE
     return Ok(sql)
 }
 
-fn build_from_clause(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
+fn build_from_clause(
+    table_permission_map: &HashMap<String, Vec<Permissions>>,
+    query_structure: &QueryStructure
+) -> Result<String, HttpErrorData> {
     let mut sql = String::new();
     sql.push_str(query_structure.from.main.as_str());
+
+    let are_select = query_structure.action == QueryStructureAction::SELECT;
+    let mut tables = vec![&query_structure.from.main];
+    for joiner in &query_structure.from.joins {
+        tables.push(&joiner.table);
+    }
+    for table in tables {
+        if let Some(permissions) = table_permission_map.get(table) {
+            for permission in permissions {
+                let joiners_opt = &permission.joiners;
+                if let Some(joiners) = joiners_opt {
+                    if permission.uid_read.is_none() && are_select {
+                        continue;
+                    }
+                    if permission.uid_write.is_none() && !are_select {
+                        continue;
+                    }
+
+                    sql.push(' ');
+                    sql.push_str(joiners);
+                }
+            }
+        }
+    }
+
     for joiner in &query_structure.from.joins {
         println!("joiner {:?}", joiner);
         let join_type = match joiner.join_type.as_str() {
@@ -78,30 +106,41 @@ fn build_from_clause(query_structure: &QueryStructure) -> Result<String, HttpErr
 
 fn build_where_clause(
     uid: &Uid,
-    table_permission_map: &HashMap<String, Permissions>,
+    table_permission_map: &HashMap<String, Vec<Permissions>>,
     query_structure: &QueryStructure
 ) -> Result<String, HttpErrorData> {
     let mut where_clause_sql = String::from("WHERE ");
 
+    let mut has_add_first_where_clause = false;
+
     fn add_table_permission_to_where_clause(
         sql: &mut String,
-        table_permission_map: &HashMap<String, Permissions>,
+        table_permissions_map: &HashMap<String, Vec<Permissions>>,
         table_name: &String,
-        uid_in_sql_opt: &Option<String>
+        uid_in_sql_opt: &Option<String>,
+        has_add_first_where_clause: &mut bool
     ) -> Result<(), HttpErrorData> {
-        let permission = &table_permission_map[table_name];
-        println!("{:?}", permission);
-        if let Some(uid_read) = &permission.uid_read {
-            sql.push_str(uid_read);
-            sql.push_str(" = ");
-            if let Some(uid_in_sql) = uid_in_sql_opt {
-                sql.push_str(uid_in_sql);
-            } else {
-                return Err(fail!(ec::Unauthorized, format!("读取表 {} 需要登陆", table_name)));
-            }
-            sql.push_str(" and ")
+        let permissions_opt = table_permissions_map.get(table_name);
 
+        if let Some(permissions) = permissions_opt {
+            for permission in permissions {
+                if let Some(uid_read) = &permission.uid_read {
+                    if *has_add_first_where_clause {
+                        sql.push_str(" AND ")
+                    } else {
+                        *has_add_first_where_clause = true
+                    }
+                    sql.push_str(uid_read);
+                    sql.push_str(" = ");
+                    if let Some(uid_in_sql) = uid_in_sql_opt {
+                        sql.push_str(uid_in_sql);
+                    } else {
+                        return Err(fail!(ec::Unauthorized, format!("读取表 {} 需要登陆", table_name)));
+                    }
+                }
+            }
         }
+
         return Ok(())
     }
 
@@ -109,12 +148,25 @@ fn build_where_clause(
         &mut where_clause_sql,
         table_permission_map,
         &query_structure.from.main,
-        &uid.uid_sql_val_str
+        &uid.uid_sql_val_str,
+        &mut has_add_first_where_clause
     )?;
+    for joiner in &query_structure.from.joins {
+        add_table_permission_to_where_clause(
+            &mut where_clause_sql,
+            table_permission_map,
+            &joiner.table,
+            &uid.uid_sql_val_str,
+            &mut has_add_first_where_clause
+        )?;
+    }
 
     let where_clause_vec = &query_structure.where_clause;
     if where_clause_vec.len() == 0 {
-        return Ok(String::new())
+        if where_clause_sql == "WHERE " {
+            return Ok(String::new())
+        }
+        return Ok(where_clause_sql)
     }
 
     fn parse_where_clause(mut sql: &mut String, where_clause: &WhereClause) -> Result<(), HttpErrorData> {
@@ -197,22 +249,30 @@ fn build_where_clause(
         Ok(())
     };
 
-    let last_where_clause_index = where_clause_vec.len() - 1;
+    let has_permission_control = has_add_first_where_clause;
     for (i, where_clause) in where_clause_vec.iter().enumerate() {
-        parse_where_clause(&mut where_clause_sql, where_clause)?;
-        if i != last_where_clause_index {
+        if has_add_first_where_clause {
             if where_clause.operator == "or" {
                 continue;
             }
-
-            if &where_clause_vec[i + 1].operator == "or" {
+            if i > 1 && &where_clause_vec[i - 1].operator == "or" {
                 continue;
             }
-
-            where_clause_sql.push_str(" AND ");
+            if i == 0 { // 防止注定的or语句破坏权限控制
+                where_clause_sql.push_str(" AND (");
+            } else {
+                where_clause_sql.push_str(" AND ");
+            }
+        } else {
+            has_add_first_where_clause = true;
         }
+        parse_where_clause(&mut where_clause_sql, where_clause)?;
+    }
+    if has_permission_control {
+        where_clause_sql.push(')');
     }
 
+    println!("{}", where_clause_sql);
     return Ok(where_clause_sql)
 }
 
@@ -257,18 +317,18 @@ fn build_limit_clause(query_structure: &QueryStructure) -> String {
 
 fn query_structure_to_sql(
     uid: &Uid,
-    permissions: &HashMap<String, Permissions>,
+    permissions: &HashMap<String, Vec<Permissions>>,
     query_structure: &QueryStructure,
     _: bool
 ) -> Result<String, HttpErrorData> {
     println!("{:?}", query_structure);
 
     let action = &query_structure.action;
-    let select_fields = build_select_fields(&query_structure)?;
-    let from_clause = build_from_clause(&query_structure)?;
-    let where_clause = build_where_clause(uid, permissions, &query_structure)?;
-    let order_by_clause = build_order_by_clause(&query_structure)?;
-    let limit_clause = build_limit_clause(&query_structure);
+    let select_fields = build_select_fields(query_structure)?;
+    let from_clause = build_from_clause(permissions, query_structure)?;
+    let where_clause = build_where_clause(uid, permissions, query_structure)?;
+    let order_by_clause = build_order_by_clause(query_structure)?;
+    let limit_clause = build_limit_clause(query_structure);
 
     Ok(format!(
         "{:?} {}\nFROM {}\n{}\n{}\n{}",
@@ -282,7 +342,7 @@ fn query_structure_to_sql(
 
 pub fn query(
     uid: &Uid,
-    permissions: &HashMap<String, Permissions>,
+    permissions: &HashMap<String, Vec<Permissions>>,
     query_structure: QueryStructure,
     by_remote: bool
 ) -> JsonResult<Vec<String>> {

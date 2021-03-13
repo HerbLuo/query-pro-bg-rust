@@ -33,7 +33,7 @@ pub struct WhereClause {
   pub commands: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum QueryStructureAction {
   SELECT,
   UPDATE,

@@ -10,9 +10,13 @@ pub fn init(port: u16, permissions: Vec<Permissions>) {
     let mut config = rocket::ignite().config().clone();
     config.set_port(port);
 
-    let table_permission_map: HashMap<String, Permissions> = permissions.into_iter()
-        .map(|p| (p.table.to_lowercase(), p))
-        .collect();
+    let mut table_permission_map: HashMap<String, Vec<Permissions>> = HashMap::new();
+    for permission in permissions {
+        let key = permission.table.to_lowercase();
+        let mut value_opt = table_permission_map.get(&key).unwrap_or(&vec![]).to_vec();
+        value_opt.push(permission);
+        table_permission_map.insert(key, value_opt);
+    }
 
     info!("Rewriting config port");
     rocket::custom(config)
