@@ -43,7 +43,7 @@ pub fn init_server_sync(config: Config) {
     controller::init(config.port, permissions);
 }
 
-pub fn init_server(config: Config<'static>) {
+pub fn init_server(config: Config) {
     thread::spawn(move|| {
         init_server_sync(config);
     });

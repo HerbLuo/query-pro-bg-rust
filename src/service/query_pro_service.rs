@@ -3,6 +3,8 @@ use serde_json::Value;
 use crate::ec;
 use crate::helper::resp::{HttpErrorData, JsonResult};
 use crate::types::Uid;
+use crate::model::permissions::Permissions;
+use std::collections::HashMap;
 
 fn build_select_fields(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
     let fields = &query_structure.fields;
@@ -74,7 +76,42 @@ fn build_from_clause(query_structure: &QueryStructure) -> Result<String, HttpErr
     return Ok(sql);
 }
 
-fn build_where_clause(uid: &Uid, query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
+fn build_where_clause(
+    uid: &Uid,
+    table_permission_map: &HashMap<String, Permissions>,
+    query_structure: &QueryStructure
+) -> Result<String, HttpErrorData> {
+    let mut where_clause_sql = String::from("WHERE ");
+
+    fn add_table_permission_to_where_clause(
+        sql: &mut String,
+        table_permission_map: &HashMap<String, Permissions>,
+        table_name: &String,
+        uid_in_sql_opt: &Option<String>
+    ) -> Result<(), HttpErrorData> {
+        let permission = &table_permission_map[table_name];
+        println!("{:?}", permission);
+        if let Some(uid_read) = &permission.uid_read {
+            sql.push_str(uid_read);
+            sql.push_str(" = ");
+            if let Some(uid_in_sql) = uid_in_sql_opt {
+                sql.push_str(uid_in_sql);
+            } else {
+                return Err(fail!(ec::Unauthorized, format!("读取表 {} 需要登陆", table_name)));
+            }
+            sql.push_str(" and ")
+
+        }
+        return Ok(())
+    }
+
+    add_table_permission_to_where_clause(
+        &mut where_clause_sql,
+        table_permission_map,
+        &query_structure.from.main,
+        &uid.uid_sql_val_str
+    )?;
+
     let where_clause_vec = &query_structure.where_clause;
     if where_clause_vec.len() == 0 {
         return Ok(String::new())
@@ -160,7 +197,6 @@ fn build_where_clause(uid: &Uid, query_structure: &QueryStructure) -> Result<Str
         Ok(())
     };
 
-    let mut where_clause_sql = String::new();
     let last_where_clause_index = where_clause_vec.len() - 1;
     for (i, where_clause) in where_clause_vec.iter().enumerate() {
         parse_where_clause(&mut where_clause_sql, where_clause)?;
@@ -177,7 +213,7 @@ fn build_where_clause(uid: &Uid, query_structure: &QueryStructure) -> Result<Str
         }
     }
 
-    return Ok(format!("WHERE {}", where_clause_sql))
+    return Ok(where_clause_sql)
 }
 
 fn build_order_by_clause(query_structure: &QueryStructure) -> Result<String, HttpErrorData> {
@@ -219,13 +255,18 @@ fn build_limit_clause(query_structure: &QueryStructure) -> String {
     String::new()
 }
 
-fn query_structure_to_sql(uid: &Uid, query_structure: &QueryStructure, _: bool) -> Result<String, HttpErrorData> {
+fn query_structure_to_sql(
+    uid: &Uid,
+    permissions: &HashMap<String, Permissions>,
+    query_structure: &QueryStructure,
+    _: bool
+) -> Result<String, HttpErrorData> {
     println!("{:?}", query_structure);
 
     let action = &query_structure.action;
     let select_fields = build_select_fields(&query_structure)?;
     let from_clause = build_from_clause(&query_structure)?;
-    let where_clause = build_where_clause(uid, &query_structure)?;
+    let where_clause = build_where_clause(uid, permissions, &query_structure)?;
     let order_by_clause = build_order_by_clause(&query_structure)?;
     let limit_clause = build_limit_clause(&query_structure);
 
@@ -239,7 +280,12 @@ fn query_structure_to_sql(uid: &Uid, query_structure: &QueryStructure, _: bool) 
     ))
 }
 
-pub fn query(uid: &Uid, query_structure: QueryStructure, by_remote: bool) -> JsonResult<Vec<String>> {
-    let sql = query_structure_to_sql(uid, &query_structure, by_remote)?;
+pub fn query(
+    uid: &Uid,
+    permissions: &HashMap<String, Permissions>,
+    query_structure: QueryStructure,
+    by_remote: bool
+) -> JsonResult<Vec<String>> {
+    let sql = query_structure_to_sql(uid, permissions, &query_structure, by_remote)?;
     Ok(success!(vec![sql]))
 }

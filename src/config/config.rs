@@ -1,36 +1,38 @@
 use crate::model::permissions::Permissions;
 
-pub struct Config<'p> {
+pub struct Config {
     pub with_logger: bool,
     pub port: u16,
-    pub permissions: &'p Vec<Permissions>,
+    pub permissions: Vec<Permissions>,
 }
 
-impl <'p> Config<'p> {
-    pub fn build() -> ConfigBuilder<'p> {
+impl  Config {
+    pub fn build() -> ConfigBuilder {
         ConfigBuilder::new()
+    }
+
+    pub fn clone_permissions(&self) -> Vec<Permissions> {
+        self.permissions.to_vec()
     }
 }
 
-pub struct ConfigBuilder<'p> {
-    config: Config<'p>,
+pub struct ConfigBuilder {
+    config: Config,
 }
 
-const DEF_PERMISSIONS: &'static Vec<Permissions> = &vec![];
-
-impl <'p> ConfigBuilder<'p> {
-    pub fn new() -> ConfigBuilder<'p> {
+impl  ConfigBuilder {
+    pub fn new() -> ConfigBuilder {
         let config = Config {
             with_logger: false,
             port: 28686,
-            permissions: DEF_PERMISSIONS,
+            permissions: vec![],
         };
         ConfigBuilder {
             config
         }
     }
 
-    pub fn permissions(mut self, permissions: &'p Vec<Permissions>) -> Self {
+    pub fn permissions(mut self, permissions: Vec<Permissions>) -> Self {
         self.config.permissions = permissions;
         self
     }
@@ -47,7 +49,7 @@ impl <'p> ConfigBuilder<'p> {
         self
     }
 
-    pub fn finalize(self) -> Config<'p> {
+    pub fn finalize(self) -> Config {
         self.config
     }
 }

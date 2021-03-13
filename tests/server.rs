@@ -25,7 +25,7 @@ fn main() {
     let config = Config::build()
         .with_logger(true)
         .port(8888)
-        .permissions(&permissions)
+        .permissions(permissions)
         .finalize();
 
     query_pro_bg_rust::set_uid_getter(get_token);

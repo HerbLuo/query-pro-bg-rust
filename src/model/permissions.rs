@@ -1,3 +1,4 @@
+#[derive(Clone, Debug)]
 pub struct Permissions {
     pub table: String, //表名
     pub column: Option<String>, //列级权限
